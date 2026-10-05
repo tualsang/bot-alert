@@ -239,14 +239,11 @@ def send_rsi_high_alert(
     timestamp,
 ):
     message = (
-        "🔴 **RSI OVERBOUGHT ALERT**\n\n"
-        f"**{ticker}**\n"
-        f"Price: **${price:,.2f}**\n"
+        "🔴 ** {{ticker}} OVERBOUGHT**\n\n"
         f"RSI({RSI_PERIOD}): **{rsi:.2f}**\n"
         f"Previous RSI: {previous:.2f}\n"
         f"Timeframe: **{RSI_TIMEFRAME_MINUTES}m**\n"
         f"Threshold: **>{RSI_HIGH:g}**\n\n"
-        f"{ticker} crossed ABOVE RSI {RSI_HIGH:g}."
     )
 
     send_discord_message(message)
@@ -260,14 +257,11 @@ def send_rsi_low_alert(
     timestamp,
 ):
     message = (
-        "🟢 **RSI OVERSOLD ALERT**\n\n"
-        f"**{ticker}**\n"
-        f"Price: **${price:,.2f}**\n"
+        "🟢 **{{ticker}} OVERSOLD**\n\n"
         f"RSI({RSI_PERIOD}): **{rsi:.2f}**\n"
         f"Previous RSI: {previous:.2f}\n"
         f"Timeframe: **{RSI_TIMEFRAME_MINUTES}m**\n"
         f"Threshold: **<{RSI_LOW:g}**\n\n"
-        f"{ticker} crossed BELOW RSI {RSI_LOW:g}."
     )
 
     send_discord_message(message)
