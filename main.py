@@ -37,8 +37,8 @@ TICKERS = [
 RSI_ENABLED = True
 
 RSI_PERIOD = 14
-RSI_HIGH = 75.0
-RSI_LOW = 25.0
+RSI_HIGH = 80.0
+RSI_LOW = 20.0
 
 # RSI is calculated using 1-minute candles.
 RSI_TIMEFRAME_MINUTES = 1
