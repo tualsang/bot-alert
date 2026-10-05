@@ -239,7 +239,7 @@ def send_rsi_high_alert(
     timestamp,
 ):
     message = (
-        f"🔴 ** {ticker} OVERBOUGHT**\n\n"
+        f"@here🔴 ** {ticker} OVERBOUGHT**\n\n"
         f"RSI({RSI_PERIOD}): **{rsi:.2f}**\n"
         f"Previous RSI: {previous:.2f}\n"
         f"Timeframe: **{RSI_TIMEFRAME_MINUTES}m**\n"
@@ -257,7 +257,7 @@ def send_rsi_low_alert(
     timestamp,
 ):
     message = (
-        f"🟢 **{ticker} OVERSOLD**\n\n"
+        f"@here 🟢 **{ticker} OVERSOLD**\n\n"
         f"RSI({RSI_PERIOD}): **{rsi:.2f}**\n"
         f"Previous RSI: {previous:.2f}\n"
         f"Timeframe: **{RSI_TIMEFRAME_MINUTES}m**\n"
@@ -279,7 +279,7 @@ def send_orb_high_alert(
     timestamp,
 ):
     message = (
-        f"🚀 ** {ticker}  RANGE BREAKOUT**\n\n"
+        f"@here 🚀 ** {ticker}  RANGE BREAKOUT**\n\n"
         f"1m Close: **${close_price:,.2f}**\n\n"
         f"Opening Range High: **${range_high:,.2f}**\n"
         f"Opening Range Low: ${range_low:,.2f}\n\n"
@@ -296,7 +296,7 @@ def send_orb_low_alert(
     timestamp,
 ):
     message = (
-        f"📉 ** {ticker} OPENING RANGE BREAKDOWN**\n\n"
+        f"@here 📉 ** {ticker} OPENING RANGE BREAKDOWN**\n\n"
         f"1m Close: **${close_price:,.2f}**\n\n"
         f"Opening Range High: ${range_high:,.2f}\n"
         f"Opening Range Low: **${range_low:,.2f}**\n\n"
