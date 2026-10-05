@@ -222,8 +222,6 @@ def send_startup_message():
         "Opening Range: 9:30–9:45 AM ET\n"
         f"Confirmation: {ORB_BREAKOUT_TIMEFRAME_MINUTES}m candle close\n"
         "Alert above OR high or below OR low\n\n"
-
-        "**Feed:** Alpaca IEX"
     )
 
     send_discord_message(message)
@@ -287,12 +285,10 @@ def send_orb_high_alert(
     timestamp,
 ):
     message = (
-        "🚀 **OPENING RANGE BREAKOUT**\n\n"
-        f"**{ticker}**\n"
+        "🚀 ** {{ticker}}  RANGE BREAKOUT**\n\n"
         f"1m Close: **${close_price:,.2f}**\n\n"
         f"Opening Range High: **${range_high:,.2f}**\n"
         f"Opening Range Low: ${range_low:,.2f}\n\n"
-        "✅ **1m candle closed ABOVE the 9:30–9:45 range.**"
     )
 
     send_discord_message(message)
@@ -306,16 +302,13 @@ def send_orb_low_alert(
     timestamp,
 ):
     message = (
-        "📉 **OPENING RANGE BREAKDOWN**\n\n"
-        f"**{ticker}**\n"
+        "📉 ** {{ticker}} OPENING RANGE BREAKDOWN**\n\n"
         f"1m Close: **${close_price:,.2f}**\n\n"
         f"Opening Range High: ${range_high:,.2f}\n"
         f"Opening Range Low: **${range_low:,.2f}**\n\n"
-        "✅ **1m candle closed BELOW the 9:30–9:45 range.**"
     )
 
     send_discord_message(message)
-
 
 # ============================================================
 # ALPACA DATA
@@ -598,40 +591,6 @@ def calculate_opening_range(
         )
 
     return orb_ranges[ticker]
-
-
-# ============================================================
-# BUILD 5-MINUTE CANDLES FROM 1-MINUTE DATA
-# ============================================================
-
-def build_5_minute_bars(df):
-    if df.empty:
-        return pd.DataFrame()
-
-    bars_5m = df.resample(
-        "5min",
-        label="left",
-        closed="left",
-    ).agg(
-        {
-            "open": "first",
-            "high": "max",
-            "low": "min",
-            "close": "last",
-            "volume": "sum",
-        }
-    )
-
-    bars_5m = bars_5m.dropna(
-        subset=[
-            "open",
-            "high",
-            "low",
-            "close",
-        ]
-    )
-
-    return bars_5m
 
 
 # ============================================================
