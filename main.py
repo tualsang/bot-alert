@@ -257,7 +257,7 @@ def send_rsi_low_alert(
     timestamp,
 ):
     message = (
-        f"🟢 **={ticker} OVERSOLD**\n\n"
+        f"🟢 **{ticker} OVERSOLD**\n\n"
         f"RSI({RSI_PERIOD}): **{rsi:.2f}**\n"
         f"Previous RSI: {previous:.2f}\n"
         f"Timeframe: **{RSI_TIMEFRAME_MINUTES}m**\n"
