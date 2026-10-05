@@ -30,18 +30,12 @@ TICKERS = [
 ]
 
 RSI_PERIOD = 14
-
 RSI_HIGH = 75.0
 RSI_LOW = 25.0
 
-TIMEFRAME_MINUTES = 5
+TIMEFRAME_MINUTES = 1
+CHECK_INTERVAL_SECONDS = 10
 
-# Number of seconds between checks.
-# We check often, but only process a ticker when a new completed
-# 5-minute candle becomes available.
-CHECK_INTERVAL_SECONDS = 30
-
-# Alpaca free market-data users can use IEX.
 DATA_FEED = DataFeed.IEX
 
 
@@ -58,7 +52,7 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================
-# LOAD ENVIRONMENT VARIABLES
+# ENVIRONMENT VARIABLES
 # ============================================================
 
 load_dotenv()
@@ -87,11 +81,12 @@ def validate_environment():
         )
 
 
+validate_environment()
+
+
 # ============================================================
 # ALPACA CLIENT
 # ============================================================
-
-validate_environment()
 
 alpaca_client = StockHistoricalDataClient(
     ALPACA_API_KEY,
@@ -103,22 +98,15 @@ alpaca_client = StockHistoricalDataClient(
 # STATE
 # ============================================================
 
-# Last completed candle timestamp processed for each ticker.
 last_processed_bar = {}
-
-# Previous RSI value for each ticker.
 previous_rsi = {}
 
 
 # ============================================================
-# RSI CALCULATION
+# RSI
 # ============================================================
 
 def calculate_rsi(close_prices: pd.Series, period: int = 14) -> pd.Series:
-    """
-    Calculate RSI using Wilder-style exponential smoothing.
-    """
-
     delta = close_prices.diff()
 
     gain = delta.clip(lower=0)
@@ -148,14 +136,10 @@ def calculate_rsi(close_prices: pd.Series, period: int = 14) -> pd.Series:
 # ============================================================
 
 def send_discord_message(message: str):
-    payload = {
-        "content": message
-    }
-
     try:
         response = requests.post(
             DISCORD_WEBHOOK_URL,
-            json=payload,
+            json={"content": message},
             timeout=10,
         )
 
@@ -168,11 +152,9 @@ def send_discord_message(message: str):
 
 
 def send_startup_message():
-    tickers = ", ".join(TICKERS)
-
     message = (
         "🟢 **RSI Scanner Started**\n\n"
-        f"**Tickers:** {tickers}\n"
+        f"**Tickers:** {', '.join(TICKERS)}\n"
         f"**Timeframe:** {TIMEFRAME_MINUTES}m\n"
         f"**RSI Period:** {RSI_PERIOD}\n"
         f"**Overbought:** {RSI_HIGH:g}\n"
@@ -192,15 +174,12 @@ def send_high_alert(
     timestamp,
 ):
     message = (
-        "🔴 **RSI OVERBOUGHT ALERT**\n\n"
-        f"**{ticker}**\n"
-        f"Price: **${price:,.2f}**\n"
+        "🔴 **{{ticker}} OVERBOUGHT **\n\n"
         f"RSI({RSI_PERIOD}): **{rsi:.2f}**\n"
         f"Previous RSI: {previous:.2f}\n"
         f"Timeframe: **{TIMEFRAME_MINUTES}m**\n"
         f"Threshold: **>{RSI_HIGH:g}**\n"
         f"Candle: `{timestamp}`\n\n"
-        f"{ticker} crossed ABOVE RSI {RSI_HIGH:g}."
     )
 
     send_discord_message(message)
@@ -214,37 +193,27 @@ def send_low_alert(
     timestamp,
 ):
     message = (
-        "🟢 **RSI OVERSOLD ALERT**\n\n"
-        f"**{ticker}**\n"
-        f"Price: **${price:,.2f}**\n"
+        "🟢 **{{ticker}} RSI OVERSOLD**\n\n"
         f"RSI({RSI_PERIOD}): **{rsi:.2f}**\n"
         f"Previous RSI: {previous:.2f}\n"
         f"Timeframe: **{TIMEFRAME_MINUTES}m**\n"
         f"Threshold: **<{RSI_LOW:g}**\n"
         f"Candle: `{timestamp}`\n\n"
-        f"{ticker} crossed BELOW RSI {RSI_LOW:g}."
     )
 
     send_discord_message(message)
 
 
 # ============================================================
-# MARKET DATA
+# ONE ALPACA REQUEST FOR ALL SYMBOLS
 # ============================================================
 
-def get_bars(ticker: str) -> pd.DataFrame:
-    """
-    Retrieve enough 5-minute bars to calculate RSI reliably.
-    """
-
+def get_all_bars():
     end = datetime.now(timezone.utc)
-
-    # Several calendar days gives us enough regular-market
-    # 5-minute candles even over weekends.
-    start = end - timedelta(days=7)
+    start = end - timedelta(days=3)
 
     request = StockBarsRequest(
-        symbol_or_symbols=ticker,
+        symbol_or_symbols=TICKERS,
         timeframe=TimeFrame(
             TIMEFRAME_MINUTES,
             TimeFrameUnit.Minute,
@@ -256,37 +225,23 @@ def get_bars(ticker: str) -> pd.DataFrame:
 
     bars = alpaca_client.get_stock_bars(request)
 
-    df = bars.df
-
-    if df.empty:
-        return pd.DataFrame()
-
-    # Alpaca may return a MultiIndex:
-    # symbol + timestamp
-    if isinstance(df.index, pd.MultiIndex):
-        try:
-            df = df.xs(ticker)
-        except KeyError:
-            return pd.DataFrame()
-
-    return df.sort_index()
+    return bars.df
 
 
 # ============================================================
-# CANDLE HANDLING
+# REMOVE INCOMPLETE CURRENT CANDLE
 # ============================================================
 
 def remove_current_incomplete_bar(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Avoid calculating RSI from the currently forming candle.
-
-    Example:
-    If the current time is 10:07, the 10:05-10:10 candle
-    is still forming, so we discard it.
-    """
-
     if df.empty:
         return df
+
+    df = df.copy()
+
+    df.index = pd.to_datetime(
+        df.index,
+        utc=True,
+    )
 
     now = pd.Timestamp.now(tz="UTC")
 
@@ -294,30 +249,39 @@ def remove_current_incomplete_bar(df: pd.DataFrame) -> pd.DataFrame:
         f"{TIMEFRAME_MINUTES}min"
     )
 
-    df = df.copy()
-
-    # Convert index to UTC timestamps if necessary.
-    index = pd.to_datetime(df.index, utc=True)
-
-    df.index = index
-
-    # Bars starting at the current bucket are incomplete.
-    df = df[df.index < current_bucket]
-
-    return df
+    return df[df.index < current_bucket]
 
 
 # ============================================================
-# PROCESS TICKER
+# PROCESS ONE SYMBOL
 # ============================================================
 
-def process_ticker(ticker: str):
+def process_ticker(ticker: str, all_bars: pd.DataFrame):
     try:
-        df = get_bars(ticker)
-
-        if df.empty:
-            logger.warning("%s: No market data returned.", ticker)
+        if all_bars.empty:
+            logger.warning("No market data returned.")
             return
+
+        if not isinstance(all_bars.index, pd.MultiIndex):
+            logger.warning(
+                "Unexpected Alpaca response format."
+            )
+            return
+
+        try:
+            df = all_bars.xs(
+                ticker,
+                level="symbol",
+            ).copy()
+
+        except KeyError:
+            logger.warning(
+                "%s: No data returned.",
+                ticker,
+            )
+            return
+
+        df = df.sort_index()
 
         df = remove_current_incomplete_bar(df)
 
@@ -334,7 +298,9 @@ def process_ticker(ticker: str):
             RSI_PERIOD,
         )
 
-        df = df.dropna(subset=["rsi"])
+        df = df.dropna(
+            subset=["rsi"]
+        )
 
         if len(df) < 2:
             return
@@ -343,14 +309,24 @@ def process_ticker(ticker: str):
 
         latest_timestamp = df.index[-1]
 
-        current_rsi = float(latest["rsi"])
-        current_price = float(latest["close"])
+        current_rsi = float(
+            latest["rsi"]
+        )
 
-        # Don't process the same completed candle twice.
-        if last_processed_bar.get(ticker) == latest_timestamp:
+        current_price = float(
+            latest["close"]
+        )
+
+        # Skip if we already processed this exact candle.
+        if (
+            last_processed_bar.get(ticker)
+            == latest_timestamp
+        ):
             return
 
-        last_processed_bar[ticker] = latest_timestamp
+        last_processed_bar[
+            ticker
+        ] = latest_timestamp
 
         logger.info(
             "%s | Price %.2f | RSI %.2f | Candle %s",
@@ -360,19 +336,17 @@ def process_ticker(ticker: str):
             latest_timestamp,
         )
 
-        old_rsi = previous_rsi.get(ticker)
+        old_rsi = previous_rsi.get(
+            ticker
+        )
 
-        # On startup we need a baseline.
-        # We intentionally do not send an alert just because
-        # RSI is already above/below a threshold.
+        # Establish baseline on startup.
         if old_rsi is None:
-            if len(df) >= 2:
-                old_rsi = float(df.iloc[-2]["rsi"])
-            else:
-                previous_rsi[ticker] = current_rsi
-                return
+            old_rsi = float(
+                df.iloc[-2]["rsi"]
+            )
 
-        # Crossing ABOVE 75.
+        # Cross ABOVE 75.
         if (
             old_rsi < RSI_HIGH
             and current_rsi >= RSI_HIGH
@@ -385,7 +359,7 @@ def process_ticker(ticker: str):
                 timestamp=latest_timestamp,
             )
 
-        # Crossing BELOW 25.
+        # Cross BELOW 25.
         elif (
             old_rsi > RSI_LOW
             and current_rsi <= RSI_LOW
@@ -398,7 +372,9 @@ def process_ticker(ticker: str):
                 timestamp=latest_timestamp,
             )
 
-        previous_rsi[ticker] = current_rsi
+        previous_rsi[
+            ticker
+        ] = current_rsi
 
     except Exception:
         logger.exception(
@@ -432,18 +408,31 @@ def run():
 
     while True:
         try:
+            logger.info(
+                "Fetching all symbols from Alpaca..."
+            )
+
+            all_bars = get_all_bars()
+
             for ticker in TICKERS:
-                process_ticker(ticker)
+                process_ticker(
+                    ticker,
+                    all_bars,
+                )
 
             logger.info(
                 "Scan complete. Sleeping %d seconds.",
                 CHECK_INTERVAL_SECONDS,
             )
 
-            time.sleep(CHECK_INTERVAL_SECONDS)
+            time.sleep(
+                CHECK_INTERVAL_SECONDS
+            )
 
         except KeyboardInterrupt:
-            logger.info("Scanner stopped by user.")
+            logger.info(
+                "Scanner stopped by user."
+            )
             break
 
         except Exception:
